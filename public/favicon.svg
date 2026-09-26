@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#eef2f8"/>
+  <path d="M16 5.4 C23.4 5.4 28.6 10.8 28.6 18 C28.6 24.8 23.2 29.6 16 29.6 C8.8 29.6 3.4 24.8 3.4 18 C3.4 10.8 8.6 5.4 16 5.4 Z" fill="#dbe4f1" stroke="#1b2233" stroke-width="1.5"/>
+  <ellipse cx="16" cy="20.6" rx="7.9" ry="8.1" fill="#f8f0e4"/>
+  <circle cx="12.1" cy="20.6" r="3.5" fill="#14181f" stroke="#ffffff" stroke-width="1.3"/>
+  <circle cx="19.9" cy="20.6" r="3.5" fill="#14181f" stroke="#ffffff" stroke-width="1.3"/>
+  <path d="M7.4 6.6 C8.77 8.28 9.08 9.95 7.4 11.4 C5.72 9.95 6.03 8.28 7.4 6.6 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(0 7.4 11.4)"/>
+  <path d="M7.4 6.6 C8.77 8.28 9.08 9.95 7.4 11.4 C5.72 9.95 6.03 8.28 7.4 6.6 Z" fill="#41589d" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(72 7.4 11.4)"/>
+  <path d="M7.4 6.6 C8.77 8.28 9.08 9.95 7.4 11.4 C5.72 9.95 6.03 8.28 7.4 6.6 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(144 7.4 11.4)"/>
+  <path d="M7.4 6.6 C8.77 8.28 9.08 9.95 7.4 11.4 C5.72 9.95 6.03 8.28 7.4 6.6 Z" fill="#41589d" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(216 7.4 11.4)"/>
+  <path d="M7.4 6.6 C8.77 8.28 9.08 9.95 7.4 11.4 C5.72 9.95 6.03 8.28 7.4 6.6 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(288 7.4 11.4)"/>
+  <circle cx="7.4" cy="11.4" r="1.25" fill="#e3ebf6" stroke="#1b2233" stroke-width="0.7"/>
+  <path d="M16 2.3 C17.52 4.15 17.85 6.00 16 7.6 C14.15 6.00 14.48 4.15 16 2.3 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(0 16 7.6)"/>
+  <path d="M16 2.3 C17.52 4.15 17.85 6.00 16 7.6 C14.15 6.00 14.48 4.15 16 2.3 Z" fill="#41589d" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(72 16 7.6)"/>
+  <path d="M16 2.3 C17.52 4.15 17.85 6.00 16 7.6 C14.15 6.00 14.48 4.15 16 2.3 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(144 16 7.6)"/>
+  <path d="M16 2.3 C17.52 4.15 17.85 6.00 16 7.6 C14.15 6.00 14.48 4.15 16 2.3 Z" fill="#41589d" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(216 16 7.6)"/>
+  <path d="M16 2.3 C17.52 4.15 17.85 6.00 16 7.6 C14.15 6.00 14.48 4.15 16 2.3 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(288 16 7.6)"/>
+  <circle cx="16" cy="7.6" r="1.38" fill="#e3ebf6" stroke="#1b2233" stroke-width="0.7"/>
+  <path d="M24.6 6.6 C25.97 8.28 26.28 9.95 24.6 11.4 C22.92 9.95 23.23 8.28 24.6 6.6 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(0 24.6 11.4)"/>
+  <path d="M24.6 6.6 C25.97 8.28 26.28 9.95 24.6 11.4 C22.92 9.95 23.23 8.28 24.6 6.6 Z" fill="#41589d" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(72 24.6 11.4)"/>
+  <path d="M24.6 6.6 C25.97 8.28 26.28 9.95 24.6 11.4 C22.92 9.95 23.23 8.28 24.6 6.6 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(144 24.6 11.4)"/>
+  <path d="M24.6 6.6 C25.97 8.28 26.28 9.95 24.6 11.4 C22.92 9.95 23.23 8.28 24.6 6.6 Z" fill="#41589d" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(216 24.6 11.4)"/>
+  <path d="M24.6 6.6 C25.97 8.28 26.28 9.95 24.6 11.4 C22.92 9.95 23.23 8.28 24.6 6.6 Z" fill="#5573c0" stroke="#1b2233" stroke-width="0.7" stroke-linejoin="round" transform="rotate(288 24.6 11.4)"/>
+  <circle cx="24.6" cy="11.4" r="1.25" fill="#e3ebf6" stroke="#1b2233" stroke-width="0.7"/>
+</svg>

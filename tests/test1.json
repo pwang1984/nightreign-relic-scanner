@@ -1,0 +1,89 @@
+{
+    "video": "test-clip1.mp4",
+    "box": {
+        "left": "55.6675%",
+        "top": "71.0397%",
+        "width": "40.3023%",
+        "height": "20.5989%"
+    },
+    "relics": [
+        {
+            "color": "green",
+            "dn": false,
+            "buffs": [
+                "7330300",
+                "7230000",
+                "7000002"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "blue",
+            "dn": false,
+            "buffs": [
+                "7342300",
+                "7044000",
+                "7090000"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "blue",
+            "dn": false,
+            "buffs": [
+                "7011200",
+                "7082800",
+                "10001"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "green",
+            "dn": false,
+            "buffs": [
+                "7010200",
+                "7090100"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "yellow",
+            "dn": false,
+            "buffs": [
+                "7280000",
+                "7031900"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "red",
+            "dn": false,
+            "buffs": [
+                "7000090",
+                "7010200",
+                "7050100"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "yellow",
+            "dn": false,
+            "buffs": [
+                "7034400",
+                "7331700",
+                "7120400"
+            ],
+            "nerfs": []
+        },
+        {
+            "color": "red",
+            "dn": false,
+            "buffs": [
+                "7011000",
+                "7000101",
+                "7001502"
+            ],
+            "nerfs": []
+        }
+    ]
+}
