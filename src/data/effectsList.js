@@ -1,9 +1,12 @@
 import rawEffects from './effects.json' with { type: 'json' }
 import rawItems from './items.json' with { type: 'json' }
+import chineseEffectNames from './zh-cn/effects.json' with { type: 'json' }
+import chineseItemNames from './zh-cn/items.json' with { type: 'json' }
+import { getLanguage } from '../lib/languages.js'
 
 // Flatten the {id: {...}} maps from relics.pro into arrays, resolving
 // `duplicateOf` references so every entry has a usable category/desc.
-function buildEffects() {
+function buildEffects(language = 'en') {
   const list = []
   for (const [id, entry] of Object.entries(rawEffects)) {
     let category = entry.category
@@ -18,7 +21,7 @@ function buildEffects() {
     if (!entry.name) continue
     list.push({
       id,
-      name: entry.name,
+      name: language === 'zh-CN' ? chineseEffectNames[id].name : entry.name,
       category: category || 'Other',
       desc: desc || '',
       type: entry.type || 'relic',
@@ -28,13 +31,13 @@ function buildEffects() {
   return list
 }
 
-function buildItems() {
+function buildItems(language = 'en') {
   const list = []
   for (const [id, entry] of Object.entries(rawItems)) {
     if (!entry.name) continue
     list.push({
       id,
-      name: entry.name,
+      name: language === 'zh-CN' ? chineseItemNames[id].name : entry.name,
       color: entry.color || 'White',
       dn: entry.dn || false,
     })
@@ -44,3 +47,16 @@ function buildItems() {
 
 export const EFFECTS = buildEffects()
 export const ITEMS = buildItems()
+
+const chineseEffects = buildEffects('zh-CN')
+const chineseItems = buildItems('zh-CN')
+
+export function getEffects(language = 'en') {
+  getLanguage(language)
+  return language === 'zh-CN' ? chineseEffects : EFFECTS
+}
+
+export function getItems(language = 'en') {
+  getLanguage(language)
+  return language === 'zh-CN' ? chineseItems : ITEMS
+}

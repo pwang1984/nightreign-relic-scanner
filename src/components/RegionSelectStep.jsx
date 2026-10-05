@@ -202,8 +202,9 @@ export default function RegionSelectStep({
     <div className="step-panel">
       <h2>2. Draw a box over the area to analyze</h2>
       <p className="step-hint">
-        Scrub to a frame where a relic's behaviors are visible, then drag across the video to draw
-        a box around just that text. Drag inside the box to move it, or drag a corner to resize.
+        Scrub to a frame where a relic's name and behaviors are visible, then drag across the video
+        to draw a box around all of that text. Include the name above the effects to identify the
+        relic and its color. Drag inside the box to move it, or drag a corner to resize.
         This same region will be sampled across the whole video. You can also scrub to where your
         relic list starts and ends and set those as the trim points, so only that part of the
         video gets analyzed.

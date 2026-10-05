@@ -4,6 +4,16 @@ const DEFAULT_CONTINUATION_THRESHOLD = 0.5 // Jaccard(new frame names, run's sta
 const DEFAULT_MIN_NAME_FREQUENCY = 0.4 // name must appear in >= this fraction of a run's frames to survive
 const DEFAULT_MERGE_THRESHOLD = 0.5 // Jaccard between two time-adjacent finished runs to merge as fragments
 
+function pickReviewEvidence(a, b) {
+  if (!a) return b
+  if (!b) return a
+  // Prefer the most complete recognition. At equal match counts retain extra
+  // text, so an unread fifth effect isn't hidden by a four-line frame.
+  const count = (sample) => sample.lines.filter((line) => line.kind !== 'item' && line.kind !== 'note').length
+  if (b.matchedCount !== a.matchedCount) return b.matchedCount > a.matchedCount ? b : a
+  return count(b) > count(a) ? b : a
+}
+
 function jaccard(setA, setB) {
   if (setA.size === 0 && setB.size === 0) return 1
   let intersection = 0
@@ -35,14 +45,14 @@ export class RelicCollector {
     this.current = null
   }
 
-  addFrame(frameMatch, timeSec) {
-    const { matchedEffects, itemMatch } = frameMatch
+  addFrame(frameMatch, timeSec, image = null) {
+    const { matchedEffects } = frameMatch
     const frameNames = new Set(matchedEffects.map((e) => normalizeEffectName(e.effectName)))
 
     if (this.current) {
       const similarity = jaccard(frameNames, this._coreNames())
       if (frameNames.size > 0 && similarity >= this.continuationThreshold) {
-        this._applyFrame(this.current, matchedEffects, itemMatch, timeSec)
+        this._applyFrame(this.current, frameMatch, timeSec, image)
         return
       }
       this._flushCurrent()
@@ -57,12 +67,14 @@ export class RelicCollector {
       firstSeen: timeSec,
       lastSeen: timeSec,
     }
-    this._applyFrame(this.current, matchedEffects, itemMatch, timeSec)
+    this._applyFrame(this.current, frameMatch, timeSec, image)
   }
 
-  _applyFrame(run, matchedEffects, itemMatch, timeSec) {
+  _applyFrame(run, frameMatch, timeSec, image) {
+    const { matchedEffects, itemMatch, review } = frameMatch
     run.frameCount += 1
     run.lastSeen = timeSec
+    if (review) run.review = pickReviewEvidence(run.review, { ...review, timeSec, image })
     if (itemMatch) run.itemVotes.push(itemMatch)
     for (const effect of matchedEffects) {
       const name = normalizeEffectName(effect.effectName)
@@ -107,6 +119,7 @@ export class RelicCollector {
       } else {
         existing.occurrences += 1
         existing.itemVotes.push(...run.itemVotes)
+        existing.review = pickReviewEvidence(existing.review, run.review)
         existing.lastSeen = run.lastSeen
       }
     }
@@ -138,6 +151,7 @@ export class RelicCollector {
         occurrences: r.occurrences,
         firstSeen: r.firstSeen,
         lastSeen: r.lastSeen,
+        review: r.review,
       }
     })
 
@@ -160,6 +174,7 @@ export class RelicCollector {
       frameCount: run.frameCount,
       firstSeen: run.firstSeen,
       lastSeen: run.lastSeen,
+      review: run.review,
     }
   }
 
@@ -197,6 +212,7 @@ export class RelicCollector {
     target.names = [...nameSet].sort()
     target.signature = signatureFromNames(target.names)
     target.itemVotes.push(...source.itemVotes)
+    target.review = pickReviewEvidence(target.review, source.review)
     target.frameCount += source.frameCount
     target.lastSeen = source.lastSeen
   }

@@ -4,6 +4,7 @@ import RegionSelectStep from './components/RegionSelectStep.jsx'
 import AnalyzeStep from './components/AnalyzeStep.jsx'
 import ResultsStep from './components/ResultsStep.jsx'
 import StepIndicator from './components/StepIndicator.jsx'
+import { LANGUAGES } from './lib/languages.js'
 import './App.css'
 
 const STEP = { UPLOAD: 0, REGION: 1, ANALYZE: 2, RESULTS: 3 }
@@ -21,6 +22,7 @@ export default function App() {
   const [endTime, setEndTime] = useState(null) // null = until the end of the video
   const [relics, setRelics] = useState([])
   const [videoUrl, setVideoUrl] = useState(null)
+  const [language, setLanguage] = useState('en')
 
   // Recreate the object URL whenever the file itself changes, and revoke
   // only the URL this effect run created (not tied to a memoized value) so
@@ -55,6 +57,16 @@ export default function App() {
       <StepIndicator activeIndex={step} />
 
       <main className="app-main">
+        {(step === STEP.UPLOAD || step === STEP.REGION) && (
+          <div className="language-picker">
+            <label htmlFor="game-language">Game text language</label>
+            <select id="game-language" value={language} onChange={(event) => setLanguage(event.target.value)}>
+              {Object.entries(LANGUAGES).map(([value, { label }]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {step === STEP.UPLOAD && (
           <UploadStep
             onVideoSelected={(file) => {
@@ -83,6 +95,8 @@ export default function App() {
         {step === STEP.ANALYZE && (
           <AnalyzeStep
             videoUrl={videoUrl}
+            videoFile={videoFile}
+            language={language}
             box={box}
             startTime={startTime}
             endTime={endTime}
@@ -94,7 +108,9 @@ export default function App() {
           />
         )}
 
-        {step === STEP.RESULTS && <ResultsStep relics={relics} onStartOver={startOver} />}
+        {step === STEP.RESULTS && (
+          <ResultsStep relics={relics} language={language} onChange={setRelics} onStartOver={startOver} />
+        )}
       </main>
     </div>
   )

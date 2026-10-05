@@ -1,53 +1,39 @@
-import { createWorker, createScheduler } from 'tesseract.js'
+import { getLanguage } from './languages.js'
 
-// Tesseract is CPU-bound and single-threaded per worker, so OCR throughput
-// scales close to linearly with worker count (measured on real frames: 401ms
-// per frame with one worker, 114ms with four). Leave a core for the main
-// thread — it still has to seek, draw, diff frames, match text and render.
-// Each worker is an independent WASM heap, and tesseract.js's own docs
-// recommend a small fixed pool rather than a worker per job.
-export const POOL_SIZE = Math.max(
-  2,
-  Math.min(4, (globalThis.navigator?.hardwareConcurrency || 4) - 1),
-)
+const engines = new Map()
 
-let schedulerPromise = null
-
-async function buildScheduler() {
-  const scheduler = createScheduler()
-  // Warm one worker to completion before spawning the rest: each worker
-  // fetches and caches the ~2MB language data independently, with no dedup
-  // between them, so starting them all cold at once means N simultaneous
-  // downloads of the same file and N redundant cache writes.
-  const first = await createWorker('eng')
-  scheduler.addWorker(first)
-
-  const rest = await Promise.all(
-    Array.from({ length: POOL_SIZE - 1 }, () => createWorker('eng')),
-  )
-  for (const worker of rest) scheduler.addWorker(worker)
-
-  return scheduler
+async function createEngine(language) {
+  if (language === 'zh-CN') {
+    const { createChineseOcr } = await import('./chineseOcr.js')
+    return createChineseOcr()
+  }
+  const { createTesseractOcr } = await import('./tesseractOcr.js')
+  return createTesseractOcr(getLanguage(language))
 }
 
-function getScheduler() {
-  if (!schedulerPromise) schedulerPromise = buildScheduler()
-  return schedulerPromise
+// Both adapters expose { recognize(image), terminate(), maxInflight }.
+// Engine choice and lifecycle stay here; the scan loop only handles frames.
+export function prepareOcr(language = 'en') {
+  getLanguage(language)
+  if (!engines.has(language)) {
+    const pending = createEngine(language).catch((error) => {
+      if (engines.get(language) === pending) engines.delete(language)
+      throw error
+    })
+    engines.set(language, pending)
+  }
+  return engines.get(language)
 }
 
-// Accepts anything tesseract.js treats as an image — we hand it a Blob, which
-// avoids the internal canvas->blob conversion it would otherwise do on the
-// calling (main) thread.
-export async function recognizeImage(image) {
-  const scheduler = await getScheduler()
-  const { data } = await scheduler.addJob('recognize', image)
-  return data.text
+export async function recognizeImage(image, language = 'en') {
+  return (await prepareOcr(language)).recognize(image)
 }
 
 export async function terminateOcr() {
-  if (!schedulerPromise) return
-  const pending = schedulerPromise
-  schedulerPromise = null
-  const scheduler = await pending
-  await scheduler.terminate()
+  const pending = [...engines.values()]
+  engines.clear()
+  await Promise.allSettled(pending.map(async (promise) => {
+    const engine = await promise
+    await engine.terminate()
+  }))
 }

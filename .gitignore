@@ -31,3 +31,5 @@ dist-ssr
 # Claude Code per-machine settings; .claude/settings.json is the shared one
 .claude/
 
+data/
+.playwright-cli/
