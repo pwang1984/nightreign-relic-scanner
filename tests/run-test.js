@@ -22,12 +22,12 @@ import { createWorker } from 'tesseract.js'
 
 import { matchFrameText, normalizeEffectName } from '../src/lib/matcher.js'
 import { RelicCollector } from '../src/lib/grouping.js'
-import { EFFECTS } from '../src/data/effectsList.js'
+import { getEffects } from '../src/data/effectsList.js'
+import { getLanguage } from '../src/lib/languages.js'
+import { SCAN_INTERVAL_SEC } from '../src/lib/videoFrames.js'
 
 const execFileAsync = promisify(execFile)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-const idToName = new Map(EFFECTS.map((e) => [String(e.id), normalizeEffectName(e.name)]))
 
 function parseFraction(value) {
   if (typeof value === 'number') return value
@@ -98,7 +98,7 @@ function jaccard(setA, setB) {
   return union === 0 ? 1 : intersection / union
 }
 
-function idsToNameSet(ids) {
+function idsToNameSet(ids, idToName) {
   return new Set((ids || []).map((id) => idToName.get(String(id)) || `<unknown effect id: ${id}>`))
 }
 
@@ -107,13 +107,13 @@ function idsToNameSet(ids) {
 // { buffs, nerfs, color, dn } shape. An empty-string color means "not
 // asserted" (e.g. the vessel color wasn't clearly visible in that clip),
 // same as omitting it entirely.
-function toExpectedRelic(relic) {
+function toExpectedRelic(relic, idToName) {
   if (Array.isArray(relic)) {
-    return { buffs: idsToNameSet(relic), nerfs: new Set(), color: null, dn: null }
+    return { buffs: idsToNameSet(relic, idToName), nerfs: new Set(), color: null, dn: null }
   }
   return {
-    buffs: idsToNameSet(relic.buffs),
-    nerfs: idsToNameSet(relic.nerfs),
+    buffs: idsToNameSet(relic.buffs, idToName),
+    nerfs: idsToNameSet(relic.nerfs, idToName),
     color: relic.color || null,
     dn: relic.dn ?? null,
   }
@@ -121,6 +121,8 @@ function toExpectedRelic(relic) {
 
 async function runTest(testFilePath) {
   const spec = JSON.parse(await readFile(testFilePath, 'utf8'))
+  const language = spec.language ?? 'en'
+  const idToName = new Map(getEffects(language).map((e) => [String(e.id), normalizeEffectName(e.name)]))
   const testDir = path.dirname(testFilePath)
   const videoPath = path.resolve(testDir, spec.video)
 
@@ -130,7 +132,7 @@ async function runTest(testFilePath) {
     width: parseFraction(spec.box.width),
     height: parseFraction(spec.box.height),
   }
-  const intervalSec = spec.intervalSec ?? 1 / 30
+  const intervalSec = spec.intervalSec ?? SCAN_INTERVAL_SEC
   const upscale = spec.upscale ?? 2
 
   const frameDir = await mkdtemp(path.join(tmpdir(), 'nightreign-test-'))
@@ -141,16 +143,13 @@ async function runTest(testFilePath) {
       extractFrames(videoPath, box, { intervalSec, upscale, frameDir }),
     )
 
-    const worker = await timed(timing, 'workerInit', () => createWorker('eng'))
+    const worker = await timed(timing, 'workerInit', async () => language === 'zh-CN'
+      ? (await import('./browser-ocr.js')).createBrowserOcrWorker()
+      : createWorker(getLanguage(language).ocr, undefined, { cachePath: tmpdir() }))
     const collector = new RelicCollector({ intervalSec })
     let framesSkipped = 0
-    // A paused or slow-scrolling capture samples the same on-screen pixels
-    // across many consecutive frames — earlier DEBUG runs showed byte-for-byte
-    // identical OCR text repeated many frames in a row, which only happens if
-    // the underlying crops really are pixel-identical. OCR is by far the
-    // costliest step, so skip it entirely (reusing the previous result) when
-    // a frame's file hash matches the last one, exactly mirroring the same
-    // optimization in the browser app's AnalyzeStep.jsx.
+    // Reuse OCR for byte-identical extracted PNGs. The browser's pixel-based
+    // comparison also tolerates encoding noise; that path has separate tests.
     let lastHash = null
     let lastText = ''
     let lastFrameMatch = null
@@ -167,7 +166,7 @@ async function runTest(testFilePath) {
         } else {
           const { data } = await timed(timing, 'ocr', () => worker.recognize(frame.file))
           text = data.text
-          frameMatch = timeSync(timing, 'match', () => matchFrameText(text))
+          frameMatch = timeSync(timing, 'match', () => matchFrameText(text, language))
           lastHash = hash
           lastText = text
           lastFrameMatch = frameMatch
@@ -186,7 +185,7 @@ async function runTest(testFilePath) {
     }
 
     const detected = timeSync(timing, 'finish', () => collector.finish())
-    const expectedRelics = spec.relics.map(toExpectedRelic)
+    const expectedRelics = spec.relics.map((relic) => toExpectedRelic(relic, idToName))
 
     return { testFilePath, frameCount: frames.length, framesSkipped, detected, expectedRelics, timing }
   } finally {
@@ -322,13 +321,13 @@ function printReport(testFilePath, frameCount, framesSkipped, { matches, extras 
 
 const TIMING_LABELS = {
   extractFrames: 'Frame extraction (ffmpeg)',
-  workerInit: 'Tesseract worker startup',
+  workerInit: 'OCR worker startup',
   hash: 'Dedup hash (skip check)',
-  ocr: 'OCR (Tesseract recognize)',
+  ocr: 'OCR (recognize)',
   match: 'Matching (Fuse fuzzy search)',
   group: 'Grouping (RelicCollector)',
   finish: 'Finalize (collector.finish)',
-  workerTerminate: 'Tesseract worker shutdown',
+  workerTerminate: 'OCR worker shutdown',
 }
 
 // 'ocr'/'match' only ever run on frames that weren't skipped as duplicates,
@@ -388,6 +387,7 @@ async function main() {
     console.log(`\n=== Overall: ${totals.exact}/${totals.total} exact, ${totals.partial} partial, ${totals.missing} missing, ${totals.extras} unexpected extras ===`)
     if (profile) printTiming('all fixtures combined', totalFrames, totalFramesSkipped, timingTotals)
   }
+  if (totals.partial || totals.missing || totals.extras) process.exitCode = 1
 }
 
 main().catch((err) => {

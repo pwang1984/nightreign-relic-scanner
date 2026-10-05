@@ -8,10 +8,16 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node tests/run-test.js"
+    "test": "node --test tests/*.test.js && node tests/run-test.js",
+    "test:unit": "node --test tests/*.test.js",
+    "test:timing": "node --test tests/videoTiming.browser.js",
+    "test:ocr": "node tests/ocr-smoke.js"
   },
   "dependencies": {
+    "@paddleocr/paddleocr-js": "^0.4.2",
     "fuse.js": "^7.5.0",
+    "mediabunny": "^1.61.3",
+    "opencc-js": "^1.4.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tesseract.js": "^7.0.0"
@@ -21,6 +27,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "playwright": "^1.63.0",
     "vite": "^8.3.0"
   }
 }

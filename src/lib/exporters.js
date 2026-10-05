@@ -66,5 +66,6 @@ export function exportRelicsAsCsv(relics) {
     r.occurrences,
   ])
   const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
-  download(`relics-${todayStamp()}.csv`, csv, 'text/csv')
+  // Excel needs the UTF-8 BOM to open Chinese names without mojibake.
+  download(`relics-${todayStamp()}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8')
 }

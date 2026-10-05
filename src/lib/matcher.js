@@ -1,5 +1,6 @@
 import Fuse from 'fuse.js'
 import { EFFECTS, ITEMS } from '../data/effectsList.js'
+import { chineseMatchingStrategy, normalizeChineseName } from './chineseMatcher.js'
 
 // Searching `desc` too (previously weighted 0.3) roughly doubles Fuse's cost
 // per candidate — `desc` is a full sentence, and with `ignoreLocation: true`
@@ -41,6 +42,7 @@ export function cleanOcrLine(line) {
 // flip between near-duplicate candidates from trivial OCR noise. Group/dedupe
 // on this instead of effectId.
 export function normalizeEffectName(name) {
+  if (/\p{Script=Han}/u.test(name)) return normalizeChineseName(name)
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
@@ -101,7 +103,7 @@ function withRawText(cached, rawLine) {
   return cached ? { ...cached, rawText: rawLine } : null
 }
 
-export function matchEffectLine(rawLine) {
+function matchEnglishEffectLine(rawLine) {
   const line = cleanOcrLine(rawLine)
   if (line.length < 4) return null
   if (effectLineCache.has(line)) return withRawText(effectLineCache.get(line), rawLine)
@@ -152,7 +154,7 @@ export function matchEffectLine(rawLine) {
 
 const MIN_CONFIDENT_ITEM_SCORE = 0.4 // matches itemFuse's own threshold, same reasoning as above
 
-export function matchItemName(rawLine) {
+function matchEnglishItemName(rawLine) {
   const line = cleanOcrLine(rawLine)
   if (line.length < 3) return null
   if (itemLineCache.has(line)) return withRawText(itemLineCache.get(line), rawLine)
@@ -179,25 +181,60 @@ export function matchItemName(rawLine) {
   return result
 }
 
+const englishMatchingStrategy = {
+  splitLines: (text) => text.split('\n'),
+  matchEffect: matchEnglishEffectLine,
+  matchItem: matchEnglishItemName,
+  matchFragments: (lines) => matchEnglishEffectLine(lines.join(' ')),
+  maxLines: 2,
+  preferMerged: (merged, current) => merged.confidence >= current.confidence,
+  isUsageNote: () => false,
+  hasReviewText: (text) => (text.match(/\p{L}/gu) || []).length >= 2,
+}
+
+const matchingStrategies = { en: englishMatchingStrategy, 'zh-CN': chineseMatchingStrategy }
+
+function getMatchingStrategy(language) {
+  if (!Object.hasOwn(matchingStrategies, language)) throw new Error(`Unsupported language: ${language}`)
+  return matchingStrategies[language]
+}
+
+export function matchEffectLine(rawLine, language = 'en') {
+  return getMatchingStrategy(language).matchEffect(rawLine)
+}
+
+export function matchItemName(rawLine, language = 'en') {
+  return getMatchingStrategy(language).matchItem(rawLine)
+}
+
+// Current matches classify notes at recognition time. Normalize legacy review
+// evidence here too, so review consumers only need the language-neutral kind.
+export function getReviewLines(review) {
+  return (review?.lines || []).map((line) =>
+    line.kind === 'unmatched' && Object.values(matchingStrategies).some((strategy) => strategy.isUsageNote(line.text))
+      ? { ...line, kind: 'note' }
+      : line,
+  )
+}
+
 // Given raw multi-line OCR text from one cropped frame, produce the set of
 // matched effect lines (deduped) plus an optional best-guess item/vessel name.
-export function matchFrameText(ocrText) {
-  const lines = ocrText
-    .split('\n')
+export function matchFrameText(ocrText, language = 'en') {
+  const strategy = getMatchingStrategy(language)
+  const lines = strategy.splitLines(ocrText)
     .map((l) => l.trim())
     .filter(Boolean)
 
   const matchedEffects = []
+  const reviewLines = []
   const seenNames = new Set()
   let bestItemMatch = null
-  let skipNextLine = false
-
   for (let i = 0; i < lines.length; i++) {
-    if (skipNextLine) {
-      skipNextLine = false
+    const line = lines[i]
+    if (strategy.isUsageNote(line)) {
+      reviewLines.push({ text: line, kind: 'note' })
       continue
     }
-    const line = lines[i]
 
     // A long effect name can get word-wrapped across two lines by the game's
     // UI (e.g. "...restores HP for allies but not for" / "self"), which
@@ -213,17 +250,18 @@ export function matchFrameText(ocrText) {
     // ...with one exception: a confidence of 1 means the line already matched
     // a compendium name exactly, and nothing the merge finds can beat that, so
     // skip the second search. That halves the fuzzy searches on clean lines.
-    const singleMatch = matchEffectLine(line)
-    const mergedMatch =
-      i + 1 < lines.length && singleMatch?.confidence !== 1
-        ? matchEffectLine(`${line} ${lines[i + 1]}`)
-        : null
-
+    const singleMatch = strategy.matchEffect(line)
     let effectMatch = singleMatch
-    let consumedNextLine = false
-    if (mergedMatch && (!singleMatch || mergedMatch.confidence >= singleMatch.confidence)) {
-      effectMatch = mergedMatch
-      consumedNextLine = true
+    let consumedLines = 1
+    const maxLines = strategy.maxLines
+    for (let count = 2; count <= maxLines && i + count <= lines.length; count++) {
+      if (effectMatch?.confidence === 1) break
+      const fragments = lines.slice(i, i + count)
+      const mergedMatch = strategy.matchFragments(fragments)
+      if (mergedMatch && (!effectMatch || strategy.preferMerged(mergedMatch, effectMatch))) {
+        effectMatch = mergedMatch
+        consumedLines = count
+      }
     }
 
     if (effectMatch) {
@@ -241,15 +279,28 @@ export function matchFrameText(ocrText) {
     // name just reads as harmless prefix noise), which would otherwise
     // swallow the line and it'd never get a chance to be recognized as the
     // item name.
-    const itemMatch = matchItemName(line)
+    const itemMatch = strategy.matchItem(line)
     if (itemMatch && (!bestItemMatch || itemMatch.confidence > bestItemMatch.confidence)) {
       bestItemMatch = itemMatch
     }
 
-    if (consumedNextLine) skipNextLine = true
+    const text = lines.slice(i, i + consumedLines).join('\n')
+    if (effectMatch) {
+      reviewLines.push({ text, kind: 'effect', effectName: effectMatch.effectName })
+    } else if (itemMatch) {
+      reviewLines.push({ text, kind: 'item' })
+    } else if (strategy.hasReviewText(text)) {
+      // Isolated icon glyphs/punctuation are not evidence of a missing effect.
+      reviewLines.push({ text, kind: 'unmatched' })
+    }
+
+    i += consumedLines - 1
   }
 
-  return { matchedEffects, itemMatch: bestItemMatch, lineCount: lines.length }
+  return {
+    matchedEffects, itemMatch: bestItemMatch, lineCount: lines.length,
+    review: { rawText: ocrText, lines: reviewLines, matchedCount: matchedEffects.length },
+  }
 }
 
 // Deep relics can carry demerits ("nerfs") alongside their normal behaviors

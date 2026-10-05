@@ -1,23 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { walkVideoFrames } from '../lib/videoFrames.js'
-import { recognizeImage, terminateOcr, POOL_SIZE } from '../lib/ocr.js'
+import { SCAN_INTERVAL_SEC, walkVideoFrames } from '../lib/videoFrames.js'
+import { detectScanTiming } from '../lib/videoTiming.js'
+import { prepareOcr, terminateOcr } from '../lib/ocr.js'
+import { getLanguage } from '../lib/languages.js'
 import { matchFrameText } from '../lib/matcher.js'
 import { RelicCollector } from '../lib/grouping.js'
 
-// Sampling this finely used to be a real cost/accuracy tradeoff, but with
-// per-frame duplicate detection an unchanged frame costs almost nothing to
-// skip, so there's no longer a reason to make this — or the upscale factor —
-// a decision the user has to make before every scan.
-const INTERVAL_SEC = 1 / 30
+// Follow the video's frame rate, capped at 60 Hz for fast-scrolling captures.
+// Unchanged frames reuse the previous OCR result and encoded preview.
 const UPSCALE = 2
-
-// How many frames may be extracted ahead of the OCR pool. Deep enough that no
-// worker ever sits idle waiting on a slow seek, shallow enough that stopping
-// mid-run drains in about a second.
-const MAX_INFLIGHT = POOL_SIZE * 2 + 2
 
 export default function AnalyzeStep({
   videoUrl,
+  videoFile,
+  language = 'en',
   box,
   startTime: initialStartTime,
   endTime: initialEndTime,
@@ -46,6 +42,8 @@ export default function AnalyzeStep({
   const [relicsFound, setRelicsFound] = useState(0)
   const [lastText, setLastText] = useState('')
   const [previewImage, setPreviewImage] = useState(null)
+  const [startupStatus, setStartupStatus] = useState('Loading video…')
+  const [samplingFps, setSamplingFps] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(
@@ -88,6 +86,7 @@ export default function AnalyzeStep({
   }
 
   async function start() {
+    let maxInflight = 0 // Set by the prepared OCR adapter before extracting frames.
     setRunning(true)
     setStopping(false)
     setError(null)
@@ -96,12 +95,15 @@ export default function AnalyzeStep({
     setFramesSkipped(0)
     setRelicsFound(0)
     setPreviewImage(null)
+    setStartupStatus('Loading video…')
+    setSamplingFps(null)
     stopRef.current = false
     pauseRef.current = { paused: false, waiters: [] }
     setPaused(false)
 
     const video = videoRef.current
-    const collector = new RelicCollector({ intervalSec: INTERVAL_SEC })
+    // Keep the existing 50 ms merge window independent of sampling density.
+    const collector = new RelicCollector({ intervalSec: SCAN_INTERVAL_SEC })
 
     // OCR runs on a pool of workers, so results come back out of order — but
     // RelicCollector builds relics from *consecutive* frames, so it must be
@@ -124,7 +126,7 @@ export default function AnalyzeStep({
       waiter?.()
     }
     const awaitSlot = () =>
-      inflight < MAX_INFLIGHT ? Promise.resolve() : new Promise((resolve) => (slotWaiter = resolve))
+      inflight < maxInflight ? Promise.resolve() : new Promise((resolve) => (slotWaiter = resolve))
 
     const fullyDrained = () => extractionDone && nextEmit >= extracted
 
@@ -151,7 +153,7 @@ export default function AnalyzeStep({
           frameMatch = lastFrameMatch
         } else {
           text = record.text
-          frameMatch = matchFrameText(text)
+          frameMatch = matchFrameText(text, language)
           lastText = text
           lastFrameMatch = frameMatch
         }
@@ -159,7 +161,7 @@ export default function AnalyzeStep({
         setLastText(text.trim() || '(no text detected)')
         setFramesSeen((n) => n + 1)
         if (record.dup) setFramesSkipped((n) => n + 1)
-        collector.addFrame(frameMatch, record.timeSec)
+        collector.addFrame(frameMatch, record.timeSec, record.image)
         setRelicsFound(collector.runs.length)
         setProgress(record.fraction)
       }
@@ -187,15 +189,25 @@ export default function AnalyzeStep({
         video.addEventListener('error', reject, { once: true })
       })
 
+      // Download failures must reach the Retry UI instead of silently
+      // producing an empty scan for every frame.
+      setStartupStatus(getLanguage(language).loadingMessage ?? 'Loading OCR…')
+      const [ocr, timing] = await Promise.all([
+        prepareOcr(language), detectScanTiming(videoFile),
+      ])
+      maxInflight = ocr.maxInflight
+      setSamplingFps(1 / timing.intervalSec)
+      setStartupStatus('Reading first video frame…')
+
       for await (const frame of walkVideoFrames(video, box, {
-        intervalSec: INTERVAL_SEC,
+        ...timing,
         upscale: UPSCALE,
         startTime,
         endTime: endTime ?? undefined,
         shouldStop: () => stopRef.current,
         waitIfPaused,
       })) {
-        showPreview(frame.blob)
+        if (!frame.duplicateOfPrev) showPreview(frame.blob)
 
         const record = {
           timeSec: frame.timeSec,
@@ -203,6 +215,7 @@ export default function AnalyzeStep({
           dup: frame.duplicateOfPrev,
           text: '',
           done: false,
+          image: frame.blob,
         }
         pending.set(frame.index, record)
         extracted = frame.index + 1
@@ -217,7 +230,7 @@ export default function AnalyzeStep({
 
         await awaitSlot()
         inflight += 1
-        recognizeImage(frame.blob)
+        ocr.recognize(frame.blob)
           .then((text) => {
             record.text = text
           })
@@ -291,7 +304,8 @@ export default function AnalyzeStep({
       <h2>3–4. Scan the video with OCR and match behaviors</h2>
       <p className="step-hint">
         We'll automatically step through the video, crop your selected region, run it through
-        Tesseract OCR, and fuzzy-match each line against the Relics.pro compendium of behaviors.
+        OCR, and match each line against the Relics.pro compendium of behaviors.
+        {' '}Game text language: {getLanguage(language).label}.
       </p>
 
       <video ref={videoRef} src={videoUrl} className="hidden-video" preload="auto" muted playsInline />
@@ -304,6 +318,7 @@ export default function AnalyzeStep({
           <div className="progress-stats">
             <span>{Math.round(progress * 100)}% complete</span>
             <span>{framesSeen} frames scanned</span>
+            {samplingFps !== null && <span>{Number(samplingFps.toFixed(2))} frames/s sampling</span>}
             {framesSkipped > 0 && <span>{framesSkipped} skipped (unchanged)</span>}
             <span>{relicsFound} relics found</span>
             {paused && <span className="paused-badge">Paused</span>}
@@ -314,7 +329,7 @@ export default function AnalyzeStep({
               {previewImage ? (
                 <img src={previewImage} alt="Region currently being scanned" />
               ) : (
-                <span className="frame-preview-placeholder">Waiting for first frame…</span>
+                <span className="frame-preview-placeholder" role="status">{startupStatus}</span>
               )}
             </div>
             <pre className="ocr-preview">{lastText}</pre>
